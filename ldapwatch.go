@@ -12,7 +12,16 @@ import (
 
 // Watch ...
 type Watch struct {
-	state int
+	state         int
+	searchRequest *ldap.SearchRequest
+	resultsChan   chan Result
+}
+
+// Result ...
+type Result struct {
+	watch   *Watch
+	results *ldap.SearchResult
+	err     error
 }
 
 // Watcher watches a set of LDAP nodes, delivering events to a channel.
@@ -21,7 +30,7 @@ type Watcher struct {
 	logger   *log.Logger
 	ticker   *time.Ticker
 	duration time.Duration
-	watches  map[string]Watch
+	watches  []Watch
 	// Events   chan Event
 	// Errors   chan error
 	// mu       sync.Mutex // Map access
@@ -40,7 +49,7 @@ func NewWatcher() (*Watcher, error) {
 	w := &Watcher{
 		duration: 500 * time.Millisecond,
 		logger:   logger,
-		watches:  make(map[string]Watch),
+		watches:  make([]Watch, 0, 10),
 		// fd:       fd,
 		// poller:   poller,
 		// watches:  make(map[string]*watch),
@@ -95,9 +104,9 @@ func (w *Watcher) Stop() {
 }
 
 // Add ...
-func (w *Watcher) Add(dn string) error {
-	// w.logger.Println(fmt.Sprintf("watching %s", dn))
-	w.watches[dn] = Watch{state: 0}
+func (w *Watcher) Add(sr *ldap.SearchRequest, rc chan Result) error {
+	watch := Watch{state: 0, searchRequest: sr, resultsChan: rc}
+	w.watches = append(w.watches, watch)
 	return nil
 }
 
@@ -110,32 +119,25 @@ func watch(w *Watcher) {
 
 func search(w *Watcher) {
 	w.logger.Println("searching...")
-	for dn, watch := range w.watches {
-		w.logger.Println(dn)
-
-		// Search for the given username
-		searchRequest := ldap.NewSearchRequest(
-			dn,
-			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-			// fmt.Sprintf("(&(objectClass=organizationalPerson)&(uid=%s))", username),
-			"(objectClass=*)",
-			[]string{"dn"},
-			nil,
-		)
-
-		sr, err := w.conn.Search(searchRequest)
+	for _, watch := range w.watches {
+		sr, err := w.conn.Search(watch.searchRequest)
 		if err != nil {
 			w.logger.Println(err)
 			watch.state = -1
+			watch.resultsChan <- Result{watch: &watch, err: err}
+			continue
 		}
 
 		if len(sr.Entries) != 1 {
-			w.logger.Println(fmt.Sprintf("%s not found", dn))
+			w.logger.Println(fmt.Sprintf("not found watch=%#v", watch))
 			watch.state = 1
+			watch.resultsChan <- Result{watch: &watch, results: sr}
+			continue
 		}
 
 		userdn := sr.Entries[0].DN
 		w.logger.Println(fmt.Sprintf("%s found", userdn))
 		watch.state = 0
+		watch.resultsChan <- Result{watch: &watch, results: sr}
 	}
 }
