@@ -20,9 +20,9 @@ type Watch struct {
 
 // Result ...
 type Result struct {
-	watch   *Watch
-	results *ldap.SearchResult
-	err     error
+	Watch   *Watch
+	Results *ldap.SearchResult
+	Err     error
 }
 
 // Watcher watches a set of LDAP nodes, delivering events to a channel.
@@ -109,9 +109,9 @@ func search(w *Watcher) {
 		sr, err := w.conn.Search(watch.searchRequest)
 
 		if err != nil {
-			result = Result{watch: &watch, err: err}
+			result = Result{Watch: &watch, Err: err}
 		} else {
-			result = Result{watch: &watch, results: sr}
+			result = Result{Watch: &watch, Results: sr}
 		}
 
 		if watch.compare(watch.prevResult, result) {
