@@ -1,7 +1,6 @@
 package ldapwatch
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -14,8 +13,9 @@ import (
 type Watch struct {
 	state         int
 	searchRequest *ldap.SearchRequest
+	compare       func(Result, Result) bool
 	resultsChan   chan Result
-	prevResult    *Result
+	prevResult    Result
 }
 
 // Result ...
@@ -89,8 +89,8 @@ func (w *Watcher) Stop() {
 }
 
 // Add ...
-func (w *Watcher) Add(sr *ldap.SearchRequest, rc chan Result) error {
-	watch := Watch{state: 0, searchRequest: sr, resultsChan: rc}
+func (w *Watcher) Add(sr *ldap.SearchRequest, compare func(Result, Result) bool, rc chan Result) error {
+	watch := Watch{state: 0, searchRequest: sr, compare: compare, resultsChan: rc}
 	w.watches = append(w.watches, watch)
 	return nil
 }
@@ -105,30 +105,18 @@ func watch(w *Watcher) {
 func search(w *Watcher) {
 	w.logger.Println("searching...")
 	for _, watch := range w.watches {
+		var result Result
 		sr, err := w.conn.Search(watch.searchRequest)
 
 		if err != nil {
-			w.logger.Println(err)
-			watch.state = -1
-
-			result := Result{watch: &watch, err: err}
-			watch.resultsChan <- result
-			watch.prevResult = &result
-			continue
+			result = Result{watch: &watch, err: err}
+		} else {
+			result = Result{watch: &watch, results: sr}
 		}
 
-		if len(sr.Entries) != 1 {
-			w.logger.Println(fmt.Sprintf("not found watch=%#v", watch))
-			watch.state = 1
-			result := Result{watch: &watch, results: sr}
+		if watch.compare(watch.prevResult, result) {
 			watch.resultsChan <- result
-			watch.prevResult = &result
-			continue
 		}
-
-		watch.state = 0
-		result := Result{watch: &watch, results: sr}
-		watch.resultsChan <- result
-		watch.prevResult = &result
+		watch.prevResult = result
 	}
 }
