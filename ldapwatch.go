@@ -43,10 +43,11 @@ type Watcher struct {
 }
 
 // NewWatcher ...
-func NewWatcher() (*Watcher, error) {
+func NewWatcher(conn *ldap.Conn) (*Watcher, error) {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	w := &Watcher{
+		conn:     conn,
 		duration: 500 * time.Millisecond,
 		logger:   logger,
 		watches:  make([]Watch, 0, 10),
@@ -61,23 +62,6 @@ func NewWatcher() (*Watcher, error) {
 	}
 
 	return w, nil
-}
-
-// Connect ...
-func (w *Watcher) Connect(host string, port int) {
-	var err error
-	w.conn, err = ldap.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
-	if err != nil {
-		w.logger.Fatal(err)
-	}
-}
-
-// Bind ...
-func (w *Watcher) Bind(user string, password string) {
-	err := w.conn.Bind(user, password)
-	if err != nil {
-		w.logger.Fatal(err)
-	}
 }
 
 // Start ...
