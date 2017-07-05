@@ -31,7 +31,7 @@ type Watcher struct {
 	logger   *log.Logger
 	ticker   *time.Ticker
 	duration time.Duration
-	watches  []Watch
+	watches  []*Watch
 	// Events   chan Event
 	// Errors   chan error
 	// mu       sync.Mutex // Map access
@@ -51,7 +51,7 @@ func NewWatcher(conn *ldap.Conn) (*Watcher, error) {
 		conn:     conn,
 		duration: 500 * time.Millisecond,
 		logger:   logger,
-		watches:  make([]Watch, 0, 10),
+		watches:  make([]*Watch, 0, 10),
 		// fd:       fd,
 		// poller:   poller,
 		// watches:  make(map[string]*watch),
@@ -91,7 +91,7 @@ func (w *Watcher) Stop() {
 // Add ...
 func (w *Watcher) Add(sr *ldap.SearchRequest, compare func(Result, Result) bool, rc chan Result) error {
 	watch := Watch{state: 0, searchRequest: sr, compare: compare, resultsChan: rc}
-	w.watches = append(w.watches, watch)
+	w.watches = append(w.watches, &watch)
 	return nil
 }
 
@@ -109,9 +109,9 @@ func search(w *Watcher) {
 		sr, err := w.conn.Search(watch.searchRequest)
 
 		if err != nil {
-			result = Result{Watch: &watch, Err: err}
+			result = Result{Watch: watch, Err: err}
 		} else {
-			result = Result{Watch: &watch, Results: sr}
+			result = Result{Watch: watch, Results: sr}
 		}
 
 		if watch.compare(watch.prevResult, result) {
