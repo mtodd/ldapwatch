@@ -15,6 +15,7 @@ type Watch struct {
 	state         int
 	searchRequest *ldap.SearchRequest
 	resultsChan   chan Result
+	prevResult    *Result
 }
 
 // Result ...
@@ -105,23 +106,29 @@ func search(w *Watcher) {
 	w.logger.Println("searching...")
 	for _, watch := range w.watches {
 		sr, err := w.conn.Search(watch.searchRequest)
+
 		if err != nil {
 			w.logger.Println(err)
 			watch.state = -1
-			watch.resultsChan <- Result{watch: &watch, err: err}
+
+			result := Result{watch: &watch, err: err}
+			watch.resultsChan <- result
+			watch.prevResult = &result
 			continue
 		}
 
 		if len(sr.Entries) != 1 {
 			w.logger.Println(fmt.Sprintf("not found watch=%#v", watch))
 			watch.state = 1
-			watch.resultsChan <- Result{watch: &watch, results: sr}
+			result := Result{watch: &watch, results: sr}
+			watch.resultsChan <- result
+			watch.prevResult = &result
 			continue
 		}
 
-		userdn := sr.Entries[0].DN
-		w.logger.Println(fmt.Sprintf("%s found", userdn))
 		watch.state = 0
-		watch.resultsChan <- Result{watch: &watch, results: sr}
+		result := Result{watch: &watch, results: sr}
+		watch.resultsChan <- result
+		watch.prevResult = &result
 	}
 }
