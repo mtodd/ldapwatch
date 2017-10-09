@@ -85,7 +85,9 @@ func (w *Watcher) Start() {
 
 // Stop ...
 func (w *Watcher) Stop() {
-	w.ticker.Stop()
+	if w.ticker != nil {
+		w.ticker.Stop()
+	}
 }
 
 // Add ...
