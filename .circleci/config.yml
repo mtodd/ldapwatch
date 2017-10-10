@@ -22,9 +22,15 @@ jobs:
       - checkout
       - setup_remote_docker
 
+      - run:
+        name: Install dependencies
+        command: |
+          apt-get update
+          apt-get install docker -y
+
       # specify any bash command here prefixed with `run: `
-      - run: sudo docker run --privileged -d -p 389:389 rroemhild/test-openldap
-      - run: sudo docker ps -a
+      - run: docker run --privileged -d -p 389:389 rroemhild/test-openldap
+      - run: docker ps -a
       - run: go get -v -t -d ./...
       - run: go build
       - run: go test -v ./...
