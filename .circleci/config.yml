@@ -20,6 +20,7 @@ jobs:
     working_directory: /go/src/github.com/mtodd/ldapwatch
     steps:
       - checkout
+      - setup_remote_docker
 
       # specify any bash command here prefixed with `run: `
       - run: docker run --privileged -d -p 389:389 rroemhild/test-openldap
