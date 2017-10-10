@@ -22,6 +22,8 @@ jobs:
       - checkout
       - setup_remote_docker
 
+      - run: sudo service docker start
+
       # specify any bash command here prefixed with `run: `
       - run: docker run --privileged -d -p 389:389 rroemhild/test-openldap
       - run: docker ps -a
