@@ -1,16 +1,19 @@
 package ldapwatch
 
 import (
+	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"testing"
 
 	ldap "gopkg.in/ldap.v2"
 )
 
 const (
-	host = "localhost"
-	port = 389
+	defaultHost = "localhost"
+	defaultPort = 389
 
 	bindusername = "cn=admin,dc=planetexpress,dc=com"
 	bindpassword = "GoodNewsEveryone"
@@ -18,8 +21,29 @@ const (
 	base = "ou=people,dc=planetexpress,dc=com"
 )
 
+var (
+	network string
+)
+
+func TestMain(m *testing.M) {
+	host := os.Getenv("LDAPHOST")
+	if host == "" {
+		host = "localhost"
+	}
+
+	port, err := strconv.Atoi(os.Getenv("LDAPPORT"))
+	if err != nil {
+		port = defaultPort
+	}
+
+	network = fmt.Sprintf("%s:%d", host, port)
+
+	flag.Parse()
+	os.Exit(m.Run())
+}
+
 func TestEnv(t *testing.T) {
-	conn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := ldap.Dial("tcp", network)
 	if err != nil {
 		t.Fatalf("ldap.Dial: %s", err)
 	}
@@ -32,7 +56,7 @@ func TestEnv(t *testing.T) {
 }
 
 func TestWatchPerson(t *testing.T) {
-	conn, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := ldap.Dial("tcp", network)
 	if err != nil {
 		t.Fatalf("ldap.Dial: %s", err)
 	}

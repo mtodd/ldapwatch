@@ -1,0 +1,24 @@
+version: '3'
+services:
+  ldapwatch:
+    build: .
+    links:
+      - ldap
+    depends_on:
+      - ldap
+    networks:
+      - ldap
+    environment:
+      - LDAPHOST=ldap
+      - LDAPPORT=389
+    # ports:
+    #  - "5000:5000"
+  ldap:
+    image: "rroemhild/test-openldap"
+    privileged: true
+    ports:
+     - "389:389"
+    networks:
+      - ldap
+networks:
+  ldap:
