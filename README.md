@@ -39,7 +39,7 @@ func main() {
   go func(c chan Result, done chan struct{}) {
     for {
       select {
-      case result = <-c:
+      case result := <-c:
         // result is the search results that have changed
       case <-done:
         return
