@@ -151,7 +151,6 @@ func TestWatchPerson(t *testing.T) {
 	searchRequest := ldap.NewSearchRequest(
 		base,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-		// fmt.Sprintf("(&(objectClass=organizationalPerson)&(uid=%s))", username),
 		fmt.Sprintf("(cn=%s)", "copy-Philip J. Fry"),
 		[]string{"dn", "mail", "modifyTimestamp"},
 		nil,
