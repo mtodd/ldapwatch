@@ -7,11 +7,6 @@ sudo: required
 services:
   - docker
 
-before_install:
-  - docker pull rroemhild/test-openldap
-  - docker run --privileged -d -p 389:389 rroemhild/test-openldap
-  - docker ps -a
-
 script:
-  - go build
-  - go test -v
+  - docker-compose build ldapwatch
+  - docker-compose run ldapwatch
