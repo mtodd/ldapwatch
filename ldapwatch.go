@@ -9,6 +9,10 @@ import (
 	ldap "gopkg.in/ldap.v2"
 )
 
+type Searcher interface {
+	Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error)
+}
+
 // Watch ...
 type Watch struct {
 	state         int
@@ -27,7 +31,7 @@ type Result struct {
 
 // Watcher watches a set of LDAP nodes, delivering events to a channel.
 type Watcher struct {
-	conn     *ldap.Conn
+	conn     Searcher
 	logger   *log.Logger
 	ticker   *time.Ticker
 	duration time.Duration
@@ -44,7 +48,7 @@ type Watcher struct {
 }
 
 // NewWatcher ...
-func NewWatcher(conn *ldap.Conn) (*Watcher, error) {
+func NewWatcher(conn Searcher) (*Watcher, error) {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	w := &Watcher{
