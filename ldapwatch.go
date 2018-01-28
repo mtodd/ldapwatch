@@ -9,6 +9,7 @@ import (
 	ldap "gopkg.in/ldap.v2"
 )
 
+// Searcher ...
 type Searcher interface {
 	Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error)
 }
