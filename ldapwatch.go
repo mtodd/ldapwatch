@@ -72,7 +72,6 @@ func (w *Watcher) Start() {
 	w.ticker = time.NewTicker(w.duration)
 
 	defer w.ticker.Stop()
-	defer w.conn.Close()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
