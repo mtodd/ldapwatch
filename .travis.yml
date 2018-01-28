@@ -8,5 +8,5 @@ services:
   - docker
 
 script:
-  - docker-compose build ldapwatch
+  - docker-compose build
   - docker-compose run ldapwatch
