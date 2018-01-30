@@ -25,8 +25,6 @@ const (
 
 var (
 	network string
-
-	updated bool
 )
 
 func TestMain(m *testing.M) {
@@ -128,6 +126,49 @@ func dupEntry(c *ldap.Conn, existingRdn string) error {
 	return c.Add(ar)
 }
 
+type testMonitor struct {
+	prev    Result
+	Changed bool
+}
+
+func (m *testMonitor) Check(r Result) {
+	// no previous results (initial search)
+	if (Result{}) == m.prev {
+		m.prev = r
+		return
+	}
+
+	// check length differences
+	if len(m.prev.Results.Entries) != len(r.Results.Entries) {
+		m.Changed = true
+		return
+	}
+
+	// check DNs match
+	prevE := m.prev.Results.Entries[0]
+	nextE := r.Results.Entries[0]
+	if prevE.DN != nextE.DN {
+		m.Changed = true
+		return
+	}
+
+	// check modifyTimestamp for updates
+	prevMod := prevE.GetAttributeValue("modifyTimestamp")
+	nextMod := nextE.GetAttributeValue("modifyTimestamp")
+	if prevMod != nextMod {
+		m.Changed = true
+		return
+	}
+
+	// fallback comparison when modifyTimestamp won't reflect subsecond updates
+	prevMail := prevE.GetAttributeValue("mail")
+	nextMail := nextE.GetAttributeValue("mail")
+	if prevMail != nextMail {
+		m.Changed = true
+		return
+	}
+}
+
 func TestWatchPerson(t *testing.T) {
 	conn, err := ldap.Dial("tcp", network)
 	if err != nil {
@@ -156,65 +197,15 @@ func TestWatchPerson(t *testing.T) {
 		nil,
 	)
 
-	updates := make(chan Result)
-	done := make(chan struct{})
-	defer func() { close(done) }()
-	go func(c chan Result, done chan struct{}) {
-		for {
-			select {
-			case <-c:
-				updated = true
-			case <-done:
-				return
-			}
-		}
-	}(updates, done)
-
-	compare := func(prev Result, next Result) bool {
-		// no previous results (initial search); treat as unchanged
-		if (Result{}) == prev {
-			return false
-		}
-
-		// check length differences
-		if len(prev.Results.Entries) != len(next.Results.Entries) {
-			return true
-		}
-
-		prevE := prev.Results.Entries[0]
-		nextE := next.Results.Entries[0]
-		if prevE.DN != nextE.DN {
-			// log.Println(fmt.Sprintf("DN mismatch %#v %#v", prevE, nextE))
-			return true
-		}
-
-		prevMod := prevE.GetAttributeValue("modifyTimestamp")
-		nextMod := nextE.GetAttributeValue("modifyTimestamp")
-		if prevMod != nextMod {
-			// log.Println(fmt.Sprintf("modifyTimestamp mismatch %#v %#v", prevMod, nextMod))
-			return true
-		}
-
-		// fallback comparison when modifyTimestamp won't reflect subsecond updates
-		prevMail := prevE.GetAttributeValue("mail")
-		nextMail := nextE.GetAttributeValue("mail")
-		if prevMail != nextMail {
-			// log.Println(fmt.Sprintf("mail mismatch %#v %#v", prevMail, nextMail))
-			return true
-		}
-
-		return false
-	}
-
 	t.Run("unmodified", func(t *testing.T) {
-		updated = false
-
 		watcher, err := NewWatcher(conn)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
-		err = watcher.Add(searchRequest, compare, updates)
+		mon := &testMonitor{}
+
+		err = watcher.Add(searchRequest, mon)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -222,28 +213,27 @@ func TestWatchPerson(t *testing.T) {
 		// first run, nothing expected
 		search(watcher)
 
-		if updated {
+		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
 		}
 
 		// second run, nothing expected
 		search(watcher)
 
-		if updated {
+		if mon.Changed {
 			t.Fatalf("entry was marked as updated but should've been unchanged")
 		}
 	})
 
 	// kill the update gofunc
 	t.Run("modified", func(t *testing.T) {
-		updated = false
-
 		watcher, err := NewWatcher(conn)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
-		err = watcher.Add(searchRequest, compare, updates)
+		mon := &testMonitor{}
+		err = watcher.Add(searchRequest, mon)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -251,7 +241,7 @@ func TestWatchPerson(t *testing.T) {
 		// first run, nothing expected
 		search(watcher)
 
-		if updated {
+		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
 		}
 
@@ -272,7 +262,7 @@ func TestWatchPerson(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		if !updated {
+		if !mon.Changed {
 			t.Fatalf("entry was not marked as updated but should've been")
 		}
 	})

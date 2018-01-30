@@ -14,13 +14,22 @@ type Searcher interface {
 	Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error)
 }
 
+// Monitor ...
+type Monitor interface {
+	Check(Result)
+}
+
+// NullMonitor ...
+type NullMonitor struct{}
+
+// Check ...
+func (m *NullMonitor) Check(Result) {}
+
 // Watch ...
 type Watch struct {
 	state         int
 	searchRequest *ldap.SearchRequest
-	compare       func(Result, Result) bool
-	resultsChan   chan Result
-	prevResult    Result
+	monitor       Monitor
 }
 
 // Result ...
@@ -95,8 +104,8 @@ func (w *Watcher) Stop() {
 }
 
 // Add ...
-func (w *Watcher) Add(sr *ldap.SearchRequest, compare func(Result, Result) bool, rc chan Result) error {
-	watch := Watch{state: 0, searchRequest: sr, compare: compare, resultsChan: rc}
+func (w *Watcher) Add(sr *ldap.SearchRequest, m Monitor) error {
+	watch := Watch{state: 0, searchRequest: sr, monitor: m}
 	w.watches = append(w.watches, &watch)
 	return nil
 }
@@ -120,9 +129,6 @@ func search(w *Watcher) {
 			result = Result{Watch: watch, Results: sr}
 		}
 
-		if watch.compare(watch.prevResult, result) {
-			watch.resultsChan <- result
-		}
-		watch.prevResult = result
+		watch.monitor.Check(result)
 	}
 }
