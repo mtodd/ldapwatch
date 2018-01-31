@@ -14,22 +14,22 @@ type Searcher interface {
 	Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error)
 }
 
-// Monitor ...
-type Monitor interface {
+// Checker ...
+type Checker interface {
 	Check(Result)
 }
 
-// NullMonitor ...
-type NullMonitor struct{}
+// NullChecker ...
+type NullChecker struct{}
 
 // Check ...
-func (m *NullMonitor) Check(Result) {}
+func (m *NullChecker) Check(Result) {}
 
 // Watch ...
 type Watch struct {
 	state         int
 	searchRequest *ldap.SearchRequest
-	monitor       Monitor
+	monitor       Checker
 }
 
 // Result ...
@@ -104,7 +104,7 @@ func (w *Watcher) Stop() {
 }
 
 // Add ...
-func (w *Watcher) Add(sr *ldap.SearchRequest, m Monitor) error {
+func (w *Watcher) Add(sr *ldap.SearchRequest, m Checker) error {
 	watch := Watch{state: 0, searchRequest: sr, monitor: m}
 	w.watches = append(w.watches, &watch)
 	return nil

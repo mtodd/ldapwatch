@@ -126,12 +126,12 @@ func dupEntry(c *ldap.Conn, existingRdn string) error {
 	return c.Add(ar)
 }
 
-type testMonitor struct {
+type testChecker struct {
 	prev    Result
 	Changed bool
 }
 
-func (m *testMonitor) Check(r Result) {
+func (m *testChecker) Check(r Result) {
 	// no previous results (initial search)
 	if (Result{}) == m.prev {
 		m.prev = r
@@ -203,7 +203,7 @@ func TestWatchPerson(t *testing.T) {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
-		mon := &testMonitor{}
+		mon := &testChecker{}
 
 		err = watcher.Add(searchRequest, mon)
 		if err != nil {
@@ -232,7 +232,7 @@ func TestWatchPerson(t *testing.T) {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
-		mon := &testMonitor{}
+		mon := &testChecker{}
 		err = watcher.Add(searchRequest, mon)
 		if err != nil {
 			log.Fatal(err)
