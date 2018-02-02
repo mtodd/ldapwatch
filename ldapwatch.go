@@ -48,12 +48,18 @@ type Watcher struct {
 }
 
 // NewWatcher ...
-func NewWatcher(conn Searcher) (*Watcher, error) {
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher, error) {
+	if dur == 0 {
+		dur = 500 * time.Millisecond
+	}
+
+	if logger == nil {
+		logger = log.New(os.Stdout, "", log.LstdFlags)
+	}
 
 	w := &Watcher{
 		conn:     conn,
-		duration: 500 * time.Millisecond,
+		duration: dur,
 		logger:   logger,
 		watches:  make([]*Watch, 0, 10),
 	}

@@ -198,7 +198,7 @@ func TestWatchPerson(t *testing.T) {
 	)
 
 	t.Run("unmodified", func(t *testing.T) {
-		watcher, err := NewWatcher(conn)
+		watcher, err := NewWatcher(conn, 500*time.Millisecond, nil)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
@@ -227,7 +227,7 @@ func TestWatchPerson(t *testing.T) {
 
 	// kill the update gofunc
 	t.Run("modified", func(t *testing.T) {
-		watcher, err := NewWatcher(conn)
+		watcher, err := NewWatcher(conn, 500*time.Millisecond, nil)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
