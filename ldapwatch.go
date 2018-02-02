@@ -84,12 +84,11 @@ func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) error {
 
 func watch(w *Watcher) {
 	for _ = range w.ticker.C {
-		w.logger.Println("tick")
-		go search(w)
+		go tick(w)
 	}
 }
 
-func search(w *Watcher) {
+func tick(w *Watcher) {
 	w.logger.Println("searching...")
 	for _, watch := range w.watches {
 		var result Result
