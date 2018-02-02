@@ -66,6 +66,7 @@ func main() {
   }(updates, done)
 
   w := ldapwatch.NewWatcher(conn)
+  defer w.Stop()
 
   c := &myChecker{updates}
 
@@ -82,7 +83,12 @@ func main() {
   w.Add(searchRequest, c)
 
   // run until SIGINT is triggered
+  done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt)
+
   w.Start()
+
+  <-done
 }
 ```
 
