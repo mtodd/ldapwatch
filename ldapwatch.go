@@ -3,7 +3,6 @@ package ldapwatch
 import (
 	"log"
 	"os"
-	"os/signal"
 	"time"
 
 	ldap "gopkg.in/ldap.v2"
@@ -81,19 +80,9 @@ func NewWatcher(conn Searcher) (*Watcher, error) {
 
 // Start ...
 func (w *Watcher) Start() {
-	w.logger.Println("initiating watch")
-
 	w.ticker = time.NewTicker(w.duration)
 
-	defer w.ticker.Stop()
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-
 	go watch(w)
-
-	<-c
-	w.logger.Println("interrupted")
 }
 
 // Stop ...
