@@ -3,6 +3,7 @@ package ldapwatch
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	ldap "gopkg.in/ldap.v2"
@@ -27,8 +28,11 @@ func (m *NullChecker) Check(Result) {}
 // Watch ...
 type Watch struct {
 	state         int
+	watcher       *Watcher
 	searchRequest *ldap.SearchRequest
 	checker       Checker
+	tick          chan struct{}
+	done          chan struct{}
 }
 
 // Result ...
@@ -45,6 +49,7 @@ type Watcher struct {
 	ticker   *time.Ticker
 	duration time.Duration
 	watches  []*Watch
+	wg       sync.WaitGroup
 }
 
 // NewWatcher ...
@@ -70,8 +75,25 @@ func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher,
 // Start ...
 func (w *Watcher) Start() {
 	w.ticker = time.NewTicker(w.duration)
+	for _, watch := range w.watches {
+		go func(watch *Watch) {
+			w.logger.Println("worker started")
+			for {
+				select {
+				case <-watch.tick:
+					watch.Tick()
+				case <-watch.done:
+					w.logger.Println("finishing")
+					w.wg.Done()
+					return
+				}
+			}
+		}(watch)
+		w.wg.Add(1)
+	}
 
-	go watch(w)
+	// await ticks, fanout ticks to workers
+	go fanoutTicks(w)
 }
 
 // Stop ...
@@ -79,33 +101,47 @@ func (w *Watcher) Stop() {
 	if w.ticker != nil {
 		w.ticker.Stop()
 	}
+
+	for _, watch := range w.watches {
+		watch.done <- struct{}{}
+	}
+
+	w.wg.Wait()
 }
 
 // Add ...
-func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) error {
-	watch := Watch{state: 0, searchRequest: sr, checker: c}
+func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) (Watch, error) {
+	watch := Watch{
+		state:         0,
+		watcher:       w,
+		searchRequest: sr,
+		checker:       c,
+		tick:          make(chan struct{}),
+		done:          make(chan struct{}),
+	}
 	w.watches = append(w.watches, &watch)
-	return nil
+	return watch, nil
 }
 
-func watch(w *Watcher) {
+func fanoutTicks(w *Watcher) {
 	for _ = range w.ticker.C {
-		go tick(w)
+		for _, watch := range w.watches {
+			watch.tick <- struct{}{}
+		}
 	}
 }
 
-func tick(w *Watcher) {
-	w.logger.Println("searching...")
-	for _, watch := range w.watches {
-		var result Result
-		sr, err := w.conn.Search(watch.searchRequest)
+func (w *Watch) Tick() error {
+	var result Result
+	sr, err := w.watcher.conn.Search(w.searchRequest)
 
-		if err != nil {
-			result = Result{Watch: watch, Err: err}
-		} else {
-			result = Result{Watch: watch, Results: sr}
-		}
-
-		watch.checker.Check(result)
+	if err != nil {
+		result = Result{Watch: w, Err: err}
+	} else {
+		result = Result{Watch: w, Results: sr}
 	}
+
+	w.checker.Check(result)
+
+	return nil
 }

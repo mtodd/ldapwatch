@@ -3,7 +3,6 @@ package ldapwatch
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -205,20 +204,20 @@ func TestWatchPerson(t *testing.T) {
 
 		mon := &testChecker{}
 
-		err = watcher.Add(searchRequest, mon)
+		watch, err := watcher.Add(searchRequest, mon)
 		if err != nil {
-			log.Fatal(err)
+			t.Fatalf("Add: %s", err)
 		}
 
 		// first run, nothing expected
-		tick(watcher)
+		watch.Tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
 		}
 
 		// second run, nothing expected
-		tick(watcher)
+		watch.Tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated but should've been unchanged")
@@ -233,13 +232,13 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		mon := &testChecker{}
-		err = watcher.Add(searchRequest, mon)
+		watch, err := watcher.Add(searchRequest, mon)
 		if err != nil {
-			log.Fatal(err)
+			t.Fatalf("Add: %s", err)
 		}
 
 		// first run, nothing expected
-		tick(watcher)
+		watch.Tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
@@ -258,7 +257,7 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		// second run, nothing expected
-		tick(watcher)
+		watch.Tick()
 
 		time.Sleep(100 * time.Millisecond)
 
