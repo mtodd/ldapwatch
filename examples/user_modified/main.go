@@ -17,33 +17,33 @@ import (
 // In this case, our Checker keeps track of previous results as well as
 // holding a channel that we notify whenever changes are detected.
 type myChecker struct {
-	prev ldapwatch.Result
-	c    chan ldapwatch.Result
+	prev *ldap.SearchResult
+	c    chan *ldap.SearchResult
 }
 
 // Check receives the result of the search; the Checker needs to take action
 // if the result does not match what it expects.
-func (c *myChecker) Check(r ldapwatch.Result) {
-	if r.Err != nil {
-		log.Printf("%s", r.Err)
+func (c *myChecker) Check(r *ldap.SearchResult, err error) {
+	if err != nil {
+		log.Printf("%s", err)
 		return
 	}
 
 	// first search sets baseline
-	if (ldapwatch.Result{}) == c.prev {
+	if c.prev == nil {
 		c.prev = r
 		return
 	}
 
-	if len(c.prev.Results.Entries) != len(r.Results.Entries) {
+	if len(c.prev.Entries) != len(r.Entries) {
 		// entries returned does not match
 		c.prev = r
 		c.c <- r
 		return
 	}
 
-	prevEntry := c.prev.Results.Entries[0]
-	nextEntry := r.Results.Entries[0]
+	prevEntry := c.prev.Entries[0]
+	nextEntry := r.Entries[0]
 
 	if prevEntry.GetAttributeValue("modifyTimestamp") != nextEntry.GetAttributeValue("modifyTimestamp") {
 		// modifyTimestamp changed
@@ -60,15 +60,15 @@ func main() {
 	defer conn.Close()
 	conn.Bind("cn=admin,dc=planetexpress,dc=com", "GoodNewsEveryone")
 
-	updates := make(chan ldapwatch.Result)
+	updates := make(chan *ldap.SearchResult)
 	done := make(chan struct{})
 	defer func() { close(done) }()
-	go func(c chan ldapwatch.Result, done chan struct{}) {
+	go func(c chan *ldap.SearchResult, done chan struct{}) {
 		for {
 			select {
 			case result := <-c:
 				// result is the search results that have changed
-				log.Printf("change detected: %s", result.Results.Entries[0].DN)
+				log.Printf("change detected: %s", result.Entries[0].DN)
 				log.Printf("%#v", result)
 			case <-done:
 				return
