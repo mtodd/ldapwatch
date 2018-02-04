@@ -16,21 +16,14 @@ type Searcher interface {
 
 // Checker ...
 type Checker interface {
-	Check(Result)
+	Check(*ldap.SearchResult, error)
 }
 
 // NullChecker ...
 type NullChecker struct{}
 
 // Check ...
-func (m *NullChecker) Check(Result) {}
-
-// Result ...
-type Result struct {
-	Watch   *Watch
-	Results *ldap.SearchResult
-	Err     error
-}
+func (m *NullChecker) Check(*ldap.SearchResult, error) {}
 
 // Watcher coordinates Watch workers.
 type Watcher struct {
@@ -128,19 +121,8 @@ func (w *Watch) stop() {
 }
 
 // perform the search and check the results with the Checker
-func (w *Watch) tick() error {
-	var result Result
-	sr, err := w.search()
-
-	if err != nil {
-		result = Result{Watch: w, Err: err}
-	} else {
-		result = Result{Watch: w, Results: sr}
-	}
-
-	w.checker.Check(result)
-
-	return nil
+func (w *Watch) tick() {
+	w.checker.Check(w.search())
 }
 
 // perform search via the Searcher
