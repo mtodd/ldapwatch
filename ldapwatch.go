@@ -25,15 +25,6 @@ type NullChecker struct{}
 // Check ...
 func (m *NullChecker) Check(Result) {}
 
-// Watch ...
-type Watch struct {
-	watcher       *Watcher
-	searchRequest *ldap.SearchRequest
-	checker       Checker
-	tick          chan struct{}
-	done          chan struct{}
-}
-
 // Result ...
 type Result struct {
 	Watch   *Watch
@@ -53,7 +44,7 @@ type Watcher struct {
 
 const defaultDuration = 500 * time.Millisecond
 
-// NewWatcher ...
+// NewWatcher constructs a Watcher.
 func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher, error) {
 	if dur == 0 {
 		dur = defaultDuration
@@ -67,7 +58,7 @@ func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher,
 		conn:     conn,
 		duration: dur,
 		logger:   logger,
-		watches:  make([]*Watch, 0, 10),
+		watches:  make([]*Watch, 0),
 	}
 
 	return w, nil
@@ -110,7 +101,16 @@ func (w *Watcher) Stop() {
 	w.wg.Wait()
 }
 
-// Add ...
+// Watch ...
+type Watch struct {
+	watcher       *Watcher
+	searchRequest *ldap.SearchRequest
+	checker       Checker
+	tick          chan struct{}
+	done          chan struct{}
+}
+
+// Add instructs the Watcher to periodically check the given search request.
 func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) (Watch, error) {
 	watch := Watch{
 		watcher:       w,
