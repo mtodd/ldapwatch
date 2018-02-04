@@ -4,7 +4,7 @@ A library for watching LDAP.
 
 ## Usage
 
-Connect to LDAP (error checking elided for brevity):
+Given a connection to LDAP like this (error checking elided for brevity):
 
 ``` go
 conn, _ := ldap.Dial("tcp", "localhost:389")
@@ -30,22 +30,24 @@ searchRequest := ldap.NewSearchRequest(
 )
 ```
 
+NOTE: Include `modifyTimestamp` operational attribute (or equivalent for your given schema/directory implementation) to check modification times (or not, up to you).
+
 Implement the `ldapwatch.Checker` interface for your check. For example:
 
 ``` go
 type myChecker struct {
-	prev ldapwatch.Result
+	prev *ldap.SearchResult
 }
 
-func (c *myChecker) Check(r ldapwatch.Result) {
+func (c *myChecker) Check(r *ldap.SearchResult, error) {
 	// first search sets baseline
-	if (ldapwatch.Result{}) == c.prev {
+	if c.prev == nil {
 		c.prev = r
 		return
 	}
 
-	prevEntry := c.prev.Results.Entries[0]
-	nextEntry := r.Results.Entries[0]
+	prevEntry := c.prev.Entries[0]
+	nextEntry := r.Entries[0]
 
 	if prevEntry.GetAttributeValue("modifyTimestamp") != nextEntry.GetAttributeValue("modifyTimestamp") {
 		// modifyTimestamp changed

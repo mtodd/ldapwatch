@@ -147,26 +147,26 @@ func dupEntry(c *ldap.Conn, existingRdn string) error {
 }
 
 type testChecker struct {
-	prev    Result
+	prev    *ldap.SearchResult
 	Changed bool
 }
 
-func (m *testChecker) Check(r Result) {
+func (m *testChecker) Check(r *ldap.SearchResult, err error) {
 	// no previous results (initial search)
-	if (Result{}) == m.prev {
+	if m.prev == nil {
 		m.prev = r
 		return
 	}
 
 	// check length differences
-	if len(m.prev.Results.Entries) != len(r.Results.Entries) {
+	if len(m.prev.Entries) != len(r.Entries) {
 		m.Changed = true
 		return
 	}
 
 	// check DNs match
-	prevE := m.prev.Results.Entries[0]
-	nextE := r.Results.Entries[0]
+	prevE := m.prev.Entries[0]
+	nextE := r.Entries[0]
 	if prevE.DN != nextE.DN {
 		m.Changed = true
 		return
