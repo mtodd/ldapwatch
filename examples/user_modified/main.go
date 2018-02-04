@@ -68,7 +68,7 @@ func main() {
 			select {
 			case result := <-c:
 				// result is the search results that have changed
-				log.Println("change detected")
+				log.Printf("change detected: %s", result.Results.Entries[0].DN)
 				log.Printf("%#v", result)
 			case <-done:
 				return
