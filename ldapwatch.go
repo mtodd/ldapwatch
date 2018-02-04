@@ -27,7 +27,6 @@ func (m *NullChecker) Check(Result) {}
 
 // Watch ...
 type Watch struct {
-	state         int
 	watcher       *Watcher
 	searchRequest *ldap.SearchRequest
 	checker       Checker
@@ -114,7 +113,6 @@ func (w *Watcher) Stop() {
 // Add ...
 func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) (Watch, error) {
 	watch := Watch{
-		state:         0,
 		watcher:       w,
 		searchRequest: sr,
 		checker:       c,
