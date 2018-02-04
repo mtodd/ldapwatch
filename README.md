@@ -1,96 +1,88 @@
+# `ldapwatch`
+
+A library for watching LDAP.
+
 ## Usage
 
+Connect to LDAP (error checking elided for brevity):
+
 ``` go
-package main
+conn, _ := ldap.Dial("tcp", "localhost:389")
+defer conn.Close()
+conn.Bind("cn=admin,dc=planetexpress,dc=com", "GoodNewsEveryone")
+```
 
-import (
-  "github.com/mtodd/ldapwatch"
+Construct an `ldap.Watcher`:
 
-  ldap "gopkg.in/ldap.v2"
+``` go
+w, err := ldapwatch.NewWatcher(conn, 30 * time.Second, nil)
+```
+
+Define an LDAP search to watch:
+
+``` go
+searchRequest := ldap.NewSearchRequest(
+  "ou=people,dc=planetexpress,dc=com",
+  ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+  "(cn=Philip J. Fry)",
+  []string{"*", "modifyTimestamp"},
+  nil,
 )
+```
 
-// Implements the ldapwatch.Checker interface in order to check whether
-// the search results change over time.
-//
-// In this case, our Checker keeps track of previous results as well as
-// holding a channel that we notify whenever changes are detected.
+Implement the `ldapwatch.Checker` interface for your check. For example:
+
+``` go
 type myChecker struct {
-  prev ldapwatch.Result
-  c    chan ldapwatch.Result
+	prev ldapwatch.Result
 }
 
-// Check receives the result of the search; the Checker needs to take action
-// if the result does not match what it expects.
 func (c *myChecker) Check(r ldapwatch.Result) {
-  // first search sets baseline
-  if (ldapwatch.Result{}) == c.prev {
-    c.prev = r
-    return
-  }
+	// first search sets baseline
+	if (ldapwatch.Result{}) == c.prev {
+		c.prev = r
+		return
+	}
 
-  if len(c.prev.Entries) != len(r.Entries) {
-    // entries returned does not match
-    c.c <- r
-    return
-  }
+	prevEntry := c.prev.Results.Entries[0]
+	nextEntry := r.Results.Entries[0]
 
-  prevEntry := c.prev.Entries[0]
-  nextEntry := r.Entries[0]
+	if prevEntry.GetAttributeValue("modifyTimestamp") != nextEntry.GetAttributeValue("modifyTimestamp") {
+		// modifyTimestamp changed
 
-  if prevEntry.GetAttributeValue("modifyTimestamp") != nextEntry.GetAttributeValue("modifyTimestamp") {
-    // modifyTimestamp changed
-    c.c <- r
-    return
-  }
+    // update to current results
+		c.prev = r
 
-  // no change
-}
+    // handle change event
+    log.Printf("user updated: %s", nextEntry.DN)
 
-func main() {
-  conn, _ := ldap.Dial("tcp", "localhost:389")
-  defer conn.Close()
-  conn.Bind("cn=admin,dc=planetexpress,dc=com", "GoodNewsEveryone")
+		return
+	}
 
-  updates := make(chan ldapwatch.Result)
-  done := make(chan struct{})
-  defer func() { close(done) }()
-  go func(c chan Result, done chan struct{}) {
-    for {
-      select {
-      case result := <-c:
-        // result is the search results that have changed
-      case <-done:
-        return
-      }
-    }
-  }(updates, done)
-
-  w := ldapwatch.NewWatcher(conn)
-  defer w.Stop()
-
-  c := &myChecker{updates}
-
-  // Search to monitor for changes
-  searchRequest := ldap.NewSearchRequest(
-    "cn=Philip J. Fry,ou=people,dc=planetexpress,dc=com",
-    ldap.ScopeBaseObject, ldap.NeverDerefAliases, 0, 0, false,
-    "",
-    []string{"*", "modifyTimestamp"},
-    , nil,
-  )
-
-  // register the search
-  w.Add(searchRequest, c)
-
-  // run until SIGINT is triggered
-  done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt)
-
-  w.Start()
-
-  <-done
+	// no change
 }
 ```
+
+NOTE: Error handling elided for brevity. How and what is checked for and what is done must be defined (by you) in your `ldapwatch.Checker`.
+
+Tell the `ldapwatch.Watcher` to use the `ldapwatch.Checker` to watch this `searchRequest`:
+
+``` go
+w.Add(searchRequest, myChecker{})
+```
+
+Start watching until `w.Stop()` is called (deferred in this case):
+
+``` go
+defer w.Stop()
+w.Start()
+```
+
+NOTE: `Start()` is nonblocking. You are responsible for sleeping/waiting your calling goroutine (usually `main()`) while the `ldapwatch.Watcher` works.
+
+### Example
+
+Check out the [example user updated check](./examples/user_modified/main.go) for a working reference implementation.
 
 ## Development & Testing Environment
 
@@ -100,4 +92,10 @@ https://store.docker.com/community/images/rroemhild/test-openldap
 ``` shell
 docker-compose build
 docker-compose run ldapwatch
+```
+
+NOTE: Once the `ldapwatch_ldap` container is running, you can run tests with:
+
+``` shell
+make test
 ```

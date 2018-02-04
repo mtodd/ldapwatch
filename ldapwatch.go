@@ -3,6 +3,7 @@ package ldapwatch
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	ldap "gopkg.in/ldap.v2"
@@ -24,13 +25,6 @@ type NullChecker struct{}
 // Check ...
 func (m *NullChecker) Check(Result) {}
 
-// Watch ...
-type Watch struct {
-	state         int
-	searchRequest *ldap.SearchRequest
-	checker       Checker
-}
-
 // Result ...
 type Result struct {
 	Watch   *Watch
@@ -38,68 +32,118 @@ type Result struct {
 	Err     error
 }
 
-// Watcher watches a set of LDAP nodes, delivering events to a channel.
+// Watcher coordinates Watch workers.
 type Watcher struct {
 	conn     Searcher
 	logger   *log.Logger
-	ticker   *time.Ticker
 	duration time.Duration
 	watches  []*Watch
+	wg       sync.WaitGroup
 }
 
-// NewWatcher ...
-func NewWatcher(conn Searcher) (*Watcher, error) {
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+const defaultDuration = 500 * time.Millisecond
 
-	w := &Watcher{
-		conn:     conn,
-		duration: 500 * time.Millisecond,
-		logger:   logger,
-		watches:  make([]*Watch, 0, 10),
+// NewWatcher constructs a Watcher.
+func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher, error) {
+	if dur == 0 {
+		dur = defaultDuration
 	}
 
-	return w, nil
+	if logger == nil {
+		logger = log.New(os.Stdout, "", log.LstdFlags)
+	}
+
+	w := Watcher{
+		conn:     conn,
+		duration: dur,
+		logger:   logger,
+		watches:  make([]*Watch, 0),
+	}
+
+	return &w, nil
 }
 
-// Start ...
+// Start sets up watch workers and begins working.
 func (w *Watcher) Start() {
-	w.ticker = time.NewTicker(w.duration)
-
-	go watch(w)
+	for _, watch := range w.watches {
+		go watch.start()
+		w.wg.Add(1)
+	}
 }
 
 // Stop ...
 func (w *Watcher) Stop() {
-	if w.ticker != nil {
-		w.ticker.Stop()
+	for _, watch := range w.watches {
+		watch.stop()
+		w.wg.Done()
+	}
+
+	w.wg.Wait()
+}
+
+// Add instructs the Watcher to periodically check the given search request.
+func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) (Watch, error) {
+	watch := Watch{
+		watcher:       w,
+		searchRequest: sr,
+		checker:       c,
+		done:          make(chan struct{}),
+	}
+	w.watches = append(w.watches, &watch)
+	return watch, nil
+}
+
+// Watch ...
+type Watch struct {
+	watcher       *Watcher
+	searchRequest *ldap.SearchRequest
+	checker       Checker
+	done          chan struct{}
+}
+
+func (w *Watch) start() {
+	timer := time.NewTimer(w.watcher.duration)
+
+	for {
+		select {
+		case <-timer.C:
+			w.tick()
+
+			// restart timer
+			timer.Reset(w.watcher.duration)
+		case <-w.done:
+			// halt timer
+			timer.Stop()
+
+			w.watcher.logger.Println("finishing")
+
+			return
+		}
 	}
 }
 
-// Add ...
-func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) error {
-	watch := Watch{state: 0, searchRequest: sr, checker: c}
-	w.watches = append(w.watches, &watch)
+// tell the watch worker to stop work via the done channel
+func (w *Watch) stop() {
+	w.done <- struct{}{}
+}
+
+// perform the search and check the results with the Checker
+func (w *Watch) tick() error {
+	var result Result
+	sr, err := w.search()
+
+	if err != nil {
+		result = Result{Watch: w, Err: err}
+	} else {
+		result = Result{Watch: w, Results: sr}
+	}
+
+	w.checker.Check(result)
+
 	return nil
 }
 
-func watch(w *Watcher) {
-	for _ = range w.ticker.C {
-		go tick(w)
-	}
-}
-
-func tick(w *Watcher) {
-	w.logger.Println("searching...")
-	for _, watch := range w.watches {
-		var result Result
-		sr, err := w.conn.Search(watch.searchRequest)
-
-		if err != nil {
-			result = Result{Watch: watch, Err: err}
-		} else {
-			result = Result{Watch: watch, Results: sr}
-		}
-
-		watch.checker.Check(result)
-	}
+// perform search via the Searcher
+func (w *Watch) search() (*ldap.SearchResult, error) {
+	return w.watcher.conn.Search(w.searchRequest)
 }

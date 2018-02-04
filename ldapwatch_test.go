@@ -3,7 +3,6 @@ package ldapwatch
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -55,6 +54,27 @@ func TestEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ldap.Bind: %s", err)
 	}
+}
+
+type fakeSearcher struct{}
+
+func (fs fakeSearcher) Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error) {
+	return nil, nil
+}
+
+func TestNewWatcher(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		var dur time.Duration
+		w, _ := NewWatcher(fakeSearcher{}, dur, nil)
+
+		if w.duration != defaultDuration {
+			t.Fatalf("default duration (%#v) expected but got %#v", defaultDuration, w.duration)
+		}
+
+		if w.logger == nil {
+			t.Fatalf("default logger expected but got %#v", w.logger)
+		}
+	})
 }
 
 func findEntry(c *ldap.Conn, cn string) (*ldap.Entry, error) {
@@ -198,27 +218,27 @@ func TestWatchPerson(t *testing.T) {
 	)
 
 	t.Run("unmodified", func(t *testing.T) {
-		watcher, err := NewWatcher(conn)
+		watcher, err := NewWatcher(conn, 500*time.Millisecond, nil)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
 		mon := &testChecker{}
 
-		err = watcher.Add(searchRequest, mon)
+		watch, err := watcher.Add(searchRequest, mon)
 		if err != nil {
-			log.Fatal(err)
+			t.Fatalf("Add: %s", err)
 		}
 
 		// first run, nothing expected
-		tick(watcher)
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
 		}
 
 		// second run, nothing expected
-		tick(watcher)
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated but should've been unchanged")
@@ -227,19 +247,19 @@ func TestWatchPerson(t *testing.T) {
 
 	// kill the update gofunc
 	t.Run("modified", func(t *testing.T) {
-		watcher, err := NewWatcher(conn)
+		watcher, err := NewWatcher(conn, 500*time.Millisecond, nil)
 		if err != nil {
 			t.Fatalf("NewWatcher: %s", err)
 		}
 
 		mon := &testChecker{}
-		err = watcher.Add(searchRequest, mon)
+		watch, err := watcher.Add(searchRequest, mon)
 		if err != nil {
-			log.Fatal(err)
+			t.Fatalf("Add: %s", err)
 		}
 
 		// first run, nothing expected
-		tick(watcher)
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
@@ -258,7 +278,7 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		// second run, nothing expected
-		tick(watcher)
+		watch.tick()
 
 		time.Sleep(100 * time.Millisecond)
 
