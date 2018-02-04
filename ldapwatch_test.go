@@ -56,6 +56,27 @@ func TestEnv(t *testing.T) {
 	}
 }
 
+type fakeSearcher struct{}
+
+func (fs fakeSearcher) Search(sr *ldap.SearchRequest) (*ldap.SearchResult, error) {
+	return nil, nil
+}
+
+func TestNewWatcher(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		var dur time.Duration
+		w, _ := NewWatcher(fakeSearcher{}, dur, nil)
+
+		if w.duration != defaultDuration {
+			t.Fatalf("default duration (%#v) expected but got %#v", defaultDuration, w.duration)
+		}
+
+		if w.logger == nil {
+			t.Fatalf("default logger expected but got %#v", w.logger)
+		}
+	})
+}
+
 func findEntry(c *ldap.Conn, cn string) (*ldap.Entry, error) {
 	sr := ldap.NewSearchRequest(
 		base,

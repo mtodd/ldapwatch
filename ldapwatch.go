@@ -42,7 +42,7 @@ type Result struct {
 	Err     error
 }
 
-// Watcher watches a set of LDAP nodes, delivering events to a channel.
+// Watcher coordinates Watch workers.
 type Watcher struct {
 	conn     Searcher
 	logger   *log.Logger
@@ -52,10 +52,12 @@ type Watcher struct {
 	wg       sync.WaitGroup
 }
 
+const defaultDuration = 500 * time.Millisecond
+
 // NewWatcher ...
 func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher, error) {
 	if dur == 0 {
-		dur = 500 * time.Millisecond
+		dur = defaultDuration
 	}
 
 	if logger == nil {
