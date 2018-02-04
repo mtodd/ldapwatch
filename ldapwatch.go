@@ -36,7 +36,6 @@ type Result struct {
 type Watcher struct {
 	conn     Searcher
 	logger   *log.Logger
-	ticker   *time.Ticker
 	duration time.Duration
 	watches  []*Watch
 	wg       sync.WaitGroup
@@ -54,60 +53,32 @@ func NewWatcher(conn Searcher, dur time.Duration, logger *log.Logger) (*Watcher,
 		logger = log.New(os.Stdout, "", log.LstdFlags)
 	}
 
-	w := &Watcher{
+	w := Watcher{
 		conn:     conn,
 		duration: dur,
 		logger:   logger,
 		watches:  make([]*Watch, 0),
 	}
 
-	return w, nil
+	return &w, nil
 }
 
-// Start ...
+// Start sets up watch workers and begins working.
 func (w *Watcher) Start() {
-	w.ticker = time.NewTicker(w.duration)
 	for _, watch := range w.watches {
-		go func(watch *Watch) {
-			w.logger.Println("worker started")
-			for {
-				select {
-				case <-watch.tick:
-					watch.Tick()
-				case <-watch.done:
-					w.logger.Println("finishing")
-					w.wg.Done()
-					return
-				}
-			}
-		}(watch)
+		go watch.start()
 		w.wg.Add(1)
 	}
-
-	// await ticks, fanout ticks to workers
-	go fanoutTicks(w)
 }
 
 // Stop ...
 func (w *Watcher) Stop() {
-	if w.ticker != nil {
-		w.ticker.Stop()
-	}
-
 	for _, watch := range w.watches {
-		watch.done <- struct{}{}
+		watch.stop()
+		w.wg.Done()
 	}
 
 	w.wg.Wait()
-}
-
-// Watch ...
-type Watch struct {
-	watcher       *Watcher
-	searchRequest *ldap.SearchRequest
-	checker       Checker
-	tick          chan struct{}
-	done          chan struct{}
 }
 
 // Add instructs the Watcher to periodically check the given search request.
@@ -116,24 +87,50 @@ func (w *Watcher) Add(sr *ldap.SearchRequest, c Checker) (Watch, error) {
 		watcher:       w,
 		searchRequest: sr,
 		checker:       c,
-		tick:          make(chan struct{}),
 		done:          make(chan struct{}),
 	}
 	w.watches = append(w.watches, &watch)
 	return watch, nil
 }
 
-func fanoutTicks(w *Watcher) {
-	for _ = range w.ticker.C {
-		for _, watch := range w.watches {
-			watch.tick <- struct{}{}
+// Watch ...
+type Watch struct {
+	watcher       *Watcher
+	searchRequest *ldap.SearchRequest
+	checker       Checker
+	done          chan struct{}
+}
+
+func (w *Watch) start() {
+	timer := time.NewTimer(w.watcher.duration)
+
+	for {
+		select {
+		case <-timer.C:
+			w.tick()
+
+			// restart timer
+			timer.Reset(w.watcher.duration)
+		case <-w.done:
+			// halt timer
+			timer.Stop()
+
+			w.watcher.logger.Println("finishing")
+
+			return
 		}
 	}
 }
 
-func (w *Watch) Tick() error {
+// tell the watch worker to stop work via the done channel
+func (w *Watch) stop() {
+	w.done <- struct{}{}
+}
+
+// perform the search and check the results with the Checker
+func (w *Watch) tick() error {
 	var result Result
-	sr, err := w.watcher.conn.Search(w.searchRequest)
+	sr, err := w.search()
 
 	if err != nil {
 		result = Result{Watch: w, Err: err}
@@ -144,4 +141,9 @@ func (w *Watch) Tick() error {
 	w.checker.Check(result)
 
 	return nil
+}
+
+// perform search via the Searcher
+func (w *Watch) search() (*ldap.SearchResult, error) {
+	return w.watcher.conn.Search(w.searchRequest)
 }

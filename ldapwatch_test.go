@@ -231,14 +231,14 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		// first run, nothing expected
-		watch.Tick()
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
 		}
 
 		// second run, nothing expected
-		watch.Tick()
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated but should've been unchanged")
@@ -259,7 +259,7 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		// first run, nothing expected
-		watch.Tick()
+		watch.tick()
 
 		if mon.Changed {
 			t.Fatalf("entry was marked as updated on the first round")
@@ -278,7 +278,7 @@ func TestWatchPerson(t *testing.T) {
 		}
 
 		// second run, nothing expected
-		watch.Tick()
+		watch.tick()
 
 		time.Sleep(100 * time.Millisecond)
 
